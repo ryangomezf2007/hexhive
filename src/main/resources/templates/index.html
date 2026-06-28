@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAN Protocol — Controller Area Network Explained</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#0A0E0C;
+            --bg2:#0E1310;
+            --panel:#111613;
+            --grid:#1E2A23;
+            --green:#4FFFB0;
+            --green-dim:#2C8A66;
+            --amber:#FFB454;
+            --amber-dim:#9C7138;
+            --ink:#E8EDE9;
+            --muted:#7C8C82;
+            --red:#FF6B5E;
+            --mono:'JetBrains Mono', monospace;
+            --sans:'Inter', sans-serif;
+        }
+        *{margin:0;padding:0;box-sizing:border-box;}
+        html{scroll-behavior:smooth;}
+        body{
+            background:var(--bg);
+            color:var(--ink);
+            font-family:var(--sans);
+            overflow-x:hidden;
+            line-height:1.6;
+        }
+        @media (prefers-reduced-motion: reduce){
+            *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
+        }
+
+        /* background scope grid, persistent */
+        .grid-bg{
+            position:fixed; inset:0; z-index:0; pointer-events:none;
+            background-image:
+                    linear-gradient(var(--grid) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+            background-size:42px 42px;
+            opacity:0.5;
+            mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+        }
+
+        section, header, footer{position:relative; z-index:1;}
+
+        .wrap{max-width:1100px; margin:0 auto; padding:0 32px;}
+
+        /* ---------- nav / channel label ---------- */
+        .chlabel{
+            font-family:var(--mono);
+            font-size:11px;
+            letter-spacing:0.12em;
+            color:var(--green);
+            text-transform:uppercase;
+            display:flex;
+            align-items:center;
+            gap:8px;
+            margin-bottom:18px;
+        }
+        .chlabel::before{
+            content:'';
+            width:7px;height:7px;border-radius:50%;
+            background:var(--green);
+            box-shadow:0 0 8px var(--green);
+            display:inline-block;
+        }
+        .chlabel.amber{color:var(--amber);}
+        .chlabel.amber::before{background:var(--amber); box-shadow:0 0 8px var(--amber);}
+
+        /* ---------- HERO ---------- */
+        .hero{
+            min-height:100vh;
+            display:flex; flex-direction:column; justify-content:center;
+            padding-top:90px; padding-bottom:60px;
+        }
+        .hero-eyebrow{
+            font-family:var(--mono); font-size:13px; letter-spacing:0.18em;
+            color:var(--muted); text-transform:uppercase; margin-bottom:24px;
+        }
+        .hero h1{
+            font-family:var(--mono);
+            font-weight:800;
+            font-size:clamp(40px, 7.5vw, 92px);
+            line-height:0.98;
+            letter-spacing:-0.01em;
+            color:var(--ink);
+        }
+        .hero h1 .hl{ color:var(--green); }
+        .hero p.sub{
+            font-size:clamp(16px, 2vw, 19px);
+            color:var(--muted);
+            max-width:560px;
+            margin-top:24px;
+        }
+        .scope-wrap{
+            margin-top:56px;
+            border:1px solid var(--grid);
+            background:linear-gradient(180deg, var(--panel), var(--bg2));
+            border-radius:6px;
+            padding:0;
+            overflow:hidden;
+        }
+        .scope-head{
+            display:flex; justify-content:space-between; align-items:center;
+            padding:14px 20px; border-bottom:1px solid var(--grid);
+            font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:0.08em;
+        }
+        .scope-head .dots{display:flex; gap:6px;}
+        .scope-head .dots span{width:8px;height:8px;border-radius:50%;background:var(--grid);}
+        canvas#scope{ display:block; width:100%; height:200px; }
+        .scope-legend{
+            display:flex; gap:28px; padding:12px 20px; border-top:1px solid var(--grid);
+            font-family:var(--mono); font-size:11px; color:var(--muted);
+        }
+        .scope-legend span{display:flex; align-items:center; gap:8px;}
+        .swatch{width:14px;height:3px;display:inline-block;border-radius:2px;}
+
+        .scroll-cue{
+            margin-top:48px; font-family:var(--mono); font-size:11px; color:var(--muted);
+            letter-spacing:0.1em; display:flex; align-items:center; gap:10px;
+        }
+        .scroll-cue .arrow{animation:bob 1.8s ease-in-out infinite;}
+        @keyframes bob{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(5px);} }
+
+        /* ---------- SECTION GENERAL ---------- */
+        section{ padding:120px 0; border-top:1px solid var(--grid); }
+        h2{
+            font-family:var(--mono);
+            font-size:clamp(28px, 4vw, 42px);
+            font-weight:700;
+            letter-spacing:-0.01em;
+            margin-bottom:18px;
+        }
+        h2 .num{ color:var(--green); }
+        .lede{
+            font-size:18px; color:var(--muted); max-width:620px; margin-bottom:56px;
+        }
+        .reveal{
+            opacity:0; transform:translateY(28px);
+            transition:opacity 0.7s cubic-bezier(.2,.7,.2,1), transform 0.7s cubic-bezier(.2,.7,.2,1);
+        }
+        .reveal.in{ opacity:1; transform:translateY(0); }
+
+        /* ---------- WHAT IS CAN / network diagram ---------- */
+        .twocol{ display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:center; }
+        @media (max-width:880px){ .twocol{grid-template-columns:1fr;} }
+        .point{ display:flex; gap:18px; margin-bottom:32px; }
+        .point .pn{
+            font-family:var(--mono); font-size:13px; color:var(--bg);
+            background:var(--green); width:28px; height:28px; border-radius:50%;
+            display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:700;
+        }
+        .point h3{ font-size:17px; margin-bottom:6px; font-weight:600; }
+        .point p{ color:var(--muted); font-size:15px; }
+
+        .net-diagram{
+            background:var(--panel); border:1px solid var(--grid); border-radius:8px;
+            padding:40px 30px 30px; position:relative; min-height:340px;
+        }
+        .net-diagram svg{ width:100%; height:280px; overflow:visible; }
+        .ecu-box{
+            fill:var(--bg2); stroke:var(--green-dim); stroke-width:1.4; rx:6;
+        }
+        .ecu-label{ font-family:var(--mono); font-size:11px; fill:var(--ink); text-anchor:middle; }
+        .bus-line{ stroke:var(--green); stroke-width:2; }
+        .stub-line{ stroke:var(--muted); stroke-width:1.2; }
+        .msg-dot{ fill:var(--amber); filter:drop-shadow(0 0 6px var(--amber)); }
+
+        /* ---------- ADVANTAGE CARDS ---------- */
+        .cards3{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+        @media (max-width:880px){ .cards3{grid-template-columns:1fr;} }
+        .card{
+            background:var(--panel); border:1px solid var(--grid); border-radius:8px;
+            padding:28px 24px; transition:border-color .3s, transform .3s;
+        }
+        .card:hover{ border-color:var(--green-dim); transform:translateY(-4px); }
+        .card .tag{ font-family:var(--mono); font-size:11px; color:var(--green); letter-spacing:0.1em; margin-bottom:14px; display:block;}
+        .card h3{ font-size:17px; margin-bottom:10px; font-weight:600; }
+        .card p{ color:var(--muted); font-size:14.5px; }
+
+        /* ---------- SIGNALING ---------- */
+        .sig-panel{
+            background:var(--panel); border:1px solid var(--grid); border-radius:8px;
+            padding:24px; margin-top:20px;
+        }
+        canvas#diffscope{ width:100%; height:170px; display:block; }
+        .bitlabels{ display:flex; font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:10px; }
+        .bitlabels span{ flex:1; text-align:center; }
+        .bitlabels span.dom{ color:var(--amber); font-weight:700; }
+        .bitlabels span.rec{ color:var(--green); }
+
+        /* ---------- FRAME FORMAT ---------- */
+        .frame-row{ display:flex; width:100%; border-radius:6px; overflow:hidden; margin-top:50px; }
+        .field{
+            padding:16px 4px; text-align:center; font-family:var(--mono);
+            border-right:1px solid var(--bg);
+            opacity:0; transform:translateY(16px);
+            transition:opacity .5s, transform .5s;
+        }
+        .field.in{ opacity:1; transform:translateY(0); }
+        .field:last-child{ border-right:none; }
+        .field .fname{ font-size:12.5px; font-weight:700; color:var(--bg); }
+        .field .fbits{ font-size:10.5px; color:rgba(10,14,12,0.7); margin-top:3px; }
+        .field-desc{
+            margin-top:36px; display:grid; grid-template-columns:repeat(2,1fr); gap:14px 40px;
+        }
+        @media (max-width:780px){ .field-desc{grid-template-columns:1fr;} }
+        .fd-item{ font-size:14.5px; color:var(--muted); padding-bottom:10px; border-bottom:1px solid var(--grid); }
+        .fd-item b{ color:var(--ink); font-family:var(--mono); font-weight:600; }
+
+        /* ---------- ARBITRATION ---------- */
+        .arb-panel{
+            background:var(--panel); border:1px solid var(--grid); border-radius:8px; padding:36px;
+        }
+        .arb-row{ display:flex; align-items:center; gap:20px; margin-bottom:28px; }
+        .arb-row:last-child{ margin-bottom:0; }
+        .arb-name{ font-family:var(--mono); font-size:14px; width:80px; flex-shrink:0; }
+        .arb-bits{ display:flex; gap:6px; }
+        .bit-box{
+            width:42px; height:42px; border-radius:4px; display:flex; align-items:center; justify-content:center;
+            font-family:var(--mono); font-weight:700; font-size:15px; border:1px solid var(--grid);
+            background:var(--bg2); color:var(--muted); transition:all .4s;
+        }
+        .bit-box.lit{ background:var(--green-dim); color:var(--bg); border-color:var(--green); }
+        .bit-box.lost{ opacity:0.25; }
+        .arb-status{ font-family:var(--mono); font-size:12.5px; width:130px; flex-shrink:0; text-align:right; transition:color .4s, opacity .4s; opacity:0;}
+        .arb-status.show{ opacity:1; }
+        .arb-status.win{ color:var(--amber); font-weight:700; }
+        .arb-status.lose{ color:var(--muted); }
+        .arb-replay{
+            margin-top:30px; font-family:var(--mono); font-size:12px; color:var(--green);
+            background:transparent; border:1px solid var(--green-dim); padding:10px 18px; border-radius:5px;
+            cursor:pointer; letter-spacing:0.05em; transition:all .2s;
+        }
+        .arb-replay:hover{ background:var(--green); color:var(--bg); }
+
+        /* ---------- ERROR STATES ---------- */
+        .fsm{ display:flex; gap:0; align-items:center; justify-content:center; margin-top:20px; flex-wrap:wrap;}
+        .fsm-node{
+            background:var(--panel); border:2px solid var(--grid); border-radius:10px;
+            padding:26px 28px; width:230px; text-align:center; transition:border-color .5s, box-shadow .5s;
+        }
+        .fsm-node h4{ font-family:var(--mono); font-size:15px; margin-bottom:10px; }
+        .fsm-node p{ font-size:13px; color:var(--muted); }
+        .fsm-node.active-state{ border-color:var(--green); box-shadow:0 0 24px rgba(79,255,176,0.18); }
+        .fsm-arrow{ font-family:var(--mono); color:var(--muted); font-size:22px; padding:0 18px; }
+        @media (max-width:780px){ .fsm{flex-direction:column;} .fsm-arrow{transform:rotate(90deg);} }
+
+        .err-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-top:50px; }
+        @media (max-width:880px){ .err-grid{grid-template-columns:repeat(2,1fr);} }
+        .err-item{
+            background:var(--panel); border:1px solid var(--grid); border-radius:6px; padding:18px 16px;
+        }
+        .err-item .en{ font-family:var(--mono); color:var(--red); font-size:12px; font-weight:700; margin-bottom:8px; }
+        .err-item p{ font-size:12.5px; color:var(--muted); }
+
+        /* ---------- VARIANTS ---------- */
+        .cards4{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+        @media (max-width:880px){ .cards4{grid-template-columns:repeat(2,1fr);} }
+        @media (max-width:520px){ .cards4{grid-template-columns:1fr;} }
+        .vcard{
+            background:var(--panel); border:1px solid var(--grid); border-radius:8px; padding:24px 20px;
+        }
+        .vcard.hi{ background:linear-gradient(160deg, var(--green-dim), var(--bg2)); border-color:var(--green); }
+        .vcard h3{ font-size:15.5px; margin-bottom:18px; font-family:var(--mono); min-height:42px;}
+        .vstat{ margin-bottom:14px; }
+        .vstat .vl{ font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;}
+        .vstat .vv{ font-family:var(--mono); font-size:15px; font-weight:700; margin-top:2px; }
+
+        /* ---------- APPLICATIONS ---------- */
+        .app-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+        @media (max-width:880px){ .app-grid{grid-template-columns:repeat(2,1fr);} }
+        .app-card{
+            border:1px solid var(--grid); border-radius:8px; padding:26px 20px; text-align:left;
+            transition:transform .3s, border-color .3s;
+        }
+        .app-card:hover{ transform:translateY(-4px); border-color:var(--amber-dim); }
+        .app-card .ai{ font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:0.1em; margin-bottom:12px; }
+        .app-card h3{ font-size:16px; margin-bottom:8px; }
+        .app-card p{ font-size:13px; color:var(--muted); }
+
+        /* ---------- FOOTER ---------- */
+        footer{
+            padding:70px 0 50px; text-align:center;
+        }
+        footer .fnote{ font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:0.06em; }
+        footer .fname{ margin-top:10px; color:var(--ink); font-size:14px; }
+    </style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- HERO -->
+<header class="hero wrap">
+    <div class="hero-eyebrow">// embedded systems · real-time networking</div>
+    <h1>CONTROLLER<br>AREA <span class="hl">NETWORK</span></h1>
+    <p class="sub">One shared wire. No central controller. A protocol built so dozens of devices can talk reliably, even with messages collide on the line.</p>
+
+    <div class="scope-wrap reveal in">
+        <div class="scope-head">
+            <span>CH1 · CAN_H — CH2 · CAN_L</span>
+            <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <canvas id="scope"></canvas>
+        <div class="scope-legend">
+            <span><span class="swatch" style="background:var(--green)"></span> CAN_H (signal high)</span>
+            <span><span class="swatch" style="background:var(--amber)"></span> CAN_L (signal low)</span>
+            <span>live differential trace</span>
+        </div>
+    </div>
+
+    <div class="scroll-cue"><span class="arrow">↓</span> scroll to explore the protocol</div>
+</header>
+
+<!-- WHAT IS CAN -->
+<section id="what" class="wrap">
+    <div class="chlabel">CH1 · 01 — overview</div>
+    <h2>What <span class="num">is</span> CAN?</h2>
+    <p class="lede reveal">A messaging system invented by Bosch in 1986 to cut down on the spaghetti of wiring inside vehicles — now used far beyond cars.</p>
+
+    <div class="twocol">
+        <div>
+            <div class="point reveal">
+                <div class="pn">1</div>
+                <div><h3>One shared bus</h3><p>Every device — engine, brakes, body, infotainment — taps into the same two wires instead of having its own dedicated line.</p></div>
+            </div>
+            <div class="point reveal">
+                <div class="pn">2</div>
+                <div><h3>No central controller</h3><p>Any device can transmit at any time. There's no master node deciding who talks when.</p></div>
+            </div>
+            <div class="point reveal">
+                <div class="pn">3</div>
+                <div><h3>Messages, not addresses</h3><p>Data is broadcast with an identifier. Every node hears it; each decides for itself whether it matters.</p></div>
+            </div>
+        </div>
+
+        <div class="net-diagram reveal">
+            <svg viewBox="0 0 420 280">
+                <line x1="60" y1="150" x2="360" y2="150" class="bus-line"/>
+                <line x1="110" y1="150" x2="110" y2="80" class="stub-line"/>
+                <line x1="210" y1="150" x2="210" y2="80" class="stub-line"/>
+                <line x1="310" y1="150" x2="310" y2="80" class="stub-line"/>
+                <line x1="210" y1="150" x2="210" y2="220" class="stub-line"/>
+
+                <rect x="70" y="40" width="80" height="40" class="ecu-box" rx="6"/>
+                <text x="110" y="64" class="ecu-label">ENGINE</text>
+
+                <rect x="170" y="40" width="80" height="40" class="ecu-box" rx="6"/>
+                <text x="210" y="64" class="ecu-label">BRAKE</text>
+
+                <rect x="270" y="40" width="80" height="40" class="ecu-box" rx="6"/>
+                <text x="310" y="64" class="ecu-label">BODY</text>
+
+                <rect x="170" y="220" width="80" height="40" class="ecu-box" rx="6"/>
+                <text x="210" y="244" class="ecu-label">INFOTAIN</text>
+
+                <circle id="netdot" class="msg-dot" cx="60" cy="150" r="5"/>
+            </svg>
+        </div>
+    </div>
+</section>
+
+<!-- WHY CAN -->
+<section id="why" class="wrap">
+    <div class="chlabel">CH1 · 02 — advantages</div>
+    <h2>Why it caught <span class="num">on</span></h2>
+    <p class="lede reveal">Six reasons CAN became the standard for in-vehicle and embedded communication.</p>
+    <div class="cards3">
+        <div class="card reveal"><span class="tag">01 — wiring</span><h3>Less wiring</h3><p>One shared pair of wires replaces dozens of point-to-point connections — lighter and cheaper.</p></div>
+        <div class="card reveal"><span class="tag">02 — robustness</span><h3>Very reliable</h3><p>Built-in error detection and a signal that resists electrical noise.</p></div>
+        <div class="card reveal"><span class="tag">03 — timing</span><h3>Fast & timely</h3><p>Priority-based access means urgent messages always get through first.</p></div>
+        <div class="card reveal"><span class="tag">04 — topology</span><h3>No single boss</h3><p>Any device can transmit. No central point of failure to take the whole network down.</p></div>
+        <div class="card reveal"><span class="tag">05 — filtering</span><h3>Smart filtering</h3><p>Devices only act on the message IDs that are relevant to them.</p></div>
+        <div class="card reveal"><span class="tag">06 — cost</span><h3>Low cost</h3><p>Simple transceivers make CAN viable for mass-market hardware.</p></div>
+    </div>
+</section>
+
+<!-- SIGNALING -->
+<section id="signal" class="wrap">
+    <div class="chlabel">CH1 · 03 — physical layer</div>
+    <h2>Dominant <span class="num">vs</span> recessive</h2>
+    <p class="lede reveal">CAN encodes bits as a voltage difference between two wires, CAN_H and CAN_L. Watch the bit pattern below drive the trace.</p>
+
+    <div class="sig-panel reveal">
+        <canvas id="diffscope"></canvas>
+        <div class="bitlabels" id="bitlabels"></div>
+    </div>
+</section>
+
+<!-- FRAME FORMAT -->
+<section id="frame" class="wrap">
+    <div class="chlabel">CH1 · 04 — message structure</div>
+    <h2>Inside a <span class="num">frame</span></h2>
+    <p class="lede reveal">Every message on the bus is built from the same labeled fields, back to back.</p>
+
+    <div class="frame-row" id="frameRow">
+        <div class="field" style="background:#4FFFB0; flex:0.7;"><div class="fname">SOF</div><div class="fbits">1 bit</div></div>
+        <div class="field" style="background:#3FE7A3; flex:1.4;"><div class="fname">ID</div><div class="fbits">11 bits</div></div>
+        <div class="field" style="background:#4FFFB0; flex:0.7;"><div class="fname">RTR</div><div class="fbits">1 bit</div></div>
+        <div class="field" style="background:#3FE7A3; flex:1.1;"><div class="fname">CTRL</div><div class="fbits">6 bits</div></div>
+        <div class="field" style="background:#FFB454; flex:2.2;"><div class="fname">DATA</div><div class="fbits">0–64 bits</div></div>
+        <div class="field" style="background:#4FFFB0; flex:1.3;"><div class="fname">CRC</div><div class="fbits">16 bits</div></div>
+        <div class="field" style="background:#3FE7A3; flex:0.8;"><div class="fname">ACK</div><div class="fbits">2 bits</div></div>
+        <div class="field" style="background:#4FFFB0; flex:1.0;"><div class="fname">EOF</div><div class="fbits">7 bits</div></div>
+    </div>
+
+    <div class="field-desc">
+        <div class="fd-item"><b>SOF</b> — marks the start of the message.</div>
+        <div class="fd-item"><b>Identifier</b> — what the message means, and its priority.</div>
+        <div class="fd-item"><b>Control</b> — how many data bytes follow.</div>
+        <div class="fd-item"><b>Data</b> — the actual payload, up to 8 bytes.</div>
+        <div class="fd-item"><b>CRC</b> — checksum so receivers can catch errors.</div>
+        <div class="fd-item"><b>ACK</b> — receivers confirm correct delivery.</div>
+        <div class="fd-item"><b>EOF</b> — marks the end of the message.</div>
+    </div>
+</section>
+
+<!-- ARBITRATION -->
+<section id="arb" class="wrap">
+    <div class="chlabel">CH1 · 05 — bus arbitration</div>
+    <h2>Who talks <span class="num">first?</span></h2>
+    <p class="lede reveal">When several devices transmit at once, they race bit by bit. A "0" always beats a "1" on the wire — no data is ever lost in the process.</p>
+
+    <div class="arb-panel reveal">
+        <div class="arb-row" data-node="A">
+            <div class="arb-name">NODE A</div>
+            <div class="arb-bits" data-bits="10110"></div>
+            <div class="arb-status"></div>
+        </div>
+        <div class="arb-row" data-node="B">
+            <div class="arb-name">NODE B</div>
+            <div class="arb-bits" data-bits="10011"></div>
+            <div class="arb-status"></div>
+        </div>
+        <div class="arb-row" data-node="C">
+            <div class="arb-name">NODE C</div>
+            <div class="arb-bits" data-bits="11000"></div>
+            <div class="arb-status"></div>
+        </div>
+        <button class="arb-replay" id="arbReplay">▶ replay arbitration</button>
+    </div>
+</section>
+
+<!-- ERROR HANDLING -->
+<section id="errors" class="wrap">
+    <div class="chlabel">CH1 · 06 — fault handling</div>
+    <h2>Catching <span class="num">mistakes</span></h2>
+    <p class="lede reveal">CAN checks every message for five kinds of error, and quietly demotes any device that causes too many of them.</p>
+
+    <div class="err-grid">
+        <div class="err-item reveal"><div class="en">BIT ERROR</div><p>Signal on the wire doesn't match what was sent.</p></div>
+        <div class="err-item reveal"><div class="en">STUFF ERROR</div><p>Too many identical bits in a row.</p></div>
+        <div class="err-item reveal"><div class="en">CRC ERROR</div><p>Checksum doesn't match the message.</p></div>
+        <div class="err-item reveal"><div class="en">FORM ERROR</div><p>A fixed field has the wrong shape.</p></div>
+        <div class="err-item reveal"><div class="en">ACK ERROR</div><p>No device confirmed receipt.</p></div>
+    </div>
+
+    <div class="fsm reveal" style="margin-top:60px;" id="fsm">
+        <div class="fsm-node" data-state="0"><h4>ERROR ACTIVE</h4><p>Normal mode. Everything works fine.</p></div>
+        <div class="fsm-arrow">→</div>
+        <div class="fsm-node" data-state="1"><h4>ERROR PASSIVE</h4><p>Too many errors. Device gets quieter but keeps working.</p></div>
+        <div class="fsm-arrow">→</div>
+        <div class="fsm-node" data-state="2"><h4>BUS OFF</h4><p>Way too many errors. Device disconnects to protect the network.</p></div>
+    </div>
+</section>
+
+<!-- VARIANTS -->
+<section id="variants" class="wrap">
+    <div class="chlabel">CH1 · 07 — protocol variants</div>
+    <h2>Pick your <span class="num">flavor</span></h2>
+    <p class="lede reveal">CAN comes in a few configurations depending on speed and identifier range needed.</p>
+
+    <div class="cards4">
+        <div class="vcard reveal">
+            <h3>Standard CAN (2.0A)</h3>
+            <div class="vstat"><div class="vl">Identifier</div><div class="vv">11-bit</div></div>
+            <div class="vstat"><div class="vl">Max speed</div><div class="vv">1 Mbps</div></div>
+            <div class="vstat"><div class="vl">Notes</div><div class="vv" style="font-size:12.5px;">The original, most common type</div></div>
+        </div>
+        <div class="vcard reveal">
+            <h3>Extended CAN (2.0B)</h3>
+            <div class="vstat"><div class="vl">Identifier</div><div class="vv">29-bit</div></div>
+            <div class="vstat"><div class="vl">Max speed</div><div class="vv">1 Mbps</div></div>
+            <div class="vstat"><div class="vl">Notes</div><div class="vv" style="font-size:12.5px;">Many more possible message IDs</div></div>
+        </div>
+        <div class="vcard reveal">
+            <h3>Low-Speed Fault-Tolerant</h3>
+            <div class="vstat"><div class="vl">Identifier</div><div class="vv">11/29-bit</div></div>
+            <div class="vstat"><div class="vl">Max speed</div><div class="vv">125 kbps</div></div>
+            <div class="vstat"><div class="vl">Notes</div><div class="vv" style="font-size:12.5px;">Keeps working if one wire fails</div></div>
+        </div>
+        <div class="vcard hi reveal">
+            <h3>CAN FD</h3>
+            <div class="vstat"><div class="vl">Identifier</div><div class="vv">11/29-bit</div></div>
+            <div class="vstat"><div class="vl">Max speed</div><div class="vv">8 Mbps</div></div>
+            <div class="vstat"><div class="vl">Notes</div><div class="vv" style="font-size:12.5px;">Newer, faster, more data per frame</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- APPLICATIONS -->
+<section id="apps" class="wrap">
+    <div class="chlabel">CH1 · 08 — where it's used</div>
+    <h2>Beyond the <span class="num">car</span></h2>
+    <div class="app-grid">
+        <div class="app-card reveal"><div class="ai">AUTOMOTIVE</div><h3>Cars</h3><p>Engines, brakes, airbags, infotainment.</p></div>
+        <div class="app-card reveal"><div class="ai">INDUSTRIAL</div><h3>Factories</h3><p>Sensors and machines coordinating on the floor.</p></div>
+        <div class="app-card reveal"><div class="ai">TRANSPORT</div><h3>Planes &amp; trains</h3><p>Where reliability is non-negotiable.</p></div>
+        <div class="app-card reveal"><div class="ai">ROBOTICS</div><h3>Robots &amp; medical devices</h3><p>Motor control and diagnostic equipment.</p></div>
+    </div>
+</section>
+
+<footer class="wrap">
+    <div class="fnote">// end of transmission — CRC verified</div>
+    <div class="fname">CAN Protocol — built for Ryan, ECE · Puducherry Technological University</div>
+</footer>
+
+<script>
+    // ---------- scroll reveal ----------
+    const revealEls = document.querySelectorAll('.reveal');
+    const io = new IntersectionObserver((entries)=>{
+        entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); } });
+    }, {threshold:0.15});
+    revealEls.forEach(el=>io.observe(el));
+
+    // ---------- frame fields stagger ----------
+    const frameFields = document.querySelectorAll('#frameRow .field');
+    const frameIO = new IntersectionObserver((entries)=>{
+        entries.forEach(e=>{
+            if(e.isIntersecting){
+                frameFields.forEach((f,i)=> setTimeout(()=> f.classList.add('in'), i*110));
+                frameIO.disconnect();
+            }
+        });
+    },{threshold:0.3});
+    frameIO.observe(document.getElementById('frameRow'));
+
+    // ---------- hero scope: continuous CAN waveform ----------
+    (function(){
+        const canvas = document.getElementById('scope');
+        const ctx = canvas.getContext('2d');
+        function resize(){
+            canvas.width = canvas.clientWidth * devicePixelRatio;
+            canvas.height = canvas.clientHeight * devicePixelRatio;
+        }
+        resize(); window.addEventListener('resize', resize);
+
+        const bitstream = [1,1,0,0,1,0,1,1,0,1,1,0,0,0,1,0,1,1,1,0,0,1,0,1,1,0];
+        const bitW = 70;
+        let offset = 0;
+
+        function draw(){
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0,0,w,h);
+            const dpr = devicePixelRatio;
+            const midH = h*0.32, midL = h*0.68;
+            const high = h*0.16, low = h*0.84;
+
+            function drawTrace(level, color, recessiveY, dominantY){
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.4*dpr;
+                ctx.shadowColor = color; ctx.shadowBlur = 8*dpr;
+                let x = -offset;
+                let first = true;
+                for(let i=-1;i<bitstream.length+2;i++){
+                    const bit = bitstream[((i%bitstream.length)+bitstream.length)%bitstream.length];
+                    const y = bit===0 ? dominantY : recessiveY; // dominant pulls apart
+                    const xs = x + i*bitW*dpr;
+                    if(first){ ctx.moveTo(xs,y); first=false; } else { ctx.lineTo(xs,y); }
+                    ctx.lineTo(xs+bitW*dpr, y);
+                }
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+            // CAN_H: recessive mid, dominant high
+            drawTrace(0, '#4FFFB0', midH, high);
+            // CAN_L: recessive mid, dominant low
+            drawTrace(0, '#FFB454', midL, low);
+
+            offset += 0.6*dpr;
+            if(offset > bitW*dpr) offset = 0;
+            requestAnimationFrame(draw);
+        }
+        draw();
+    })();
+
+    // ---------- network diagram message pulse ----------
+    (function(){
+        const dot = document.getElementById('netdot');
+        if(!dot) return;
+        const path = [
+            {x:60,y:150},{x:110,y:150},{x:110,y:80},
+            {x:110,y:150},{x:210,y:150},{x:210,y:80},
+            {x:210,y:150},{x:310,y:150},{x:310,y:80},
+            {x:310,y:150},{x:210,y:150},{x:210,y:220}
+        ];
+        let segIdx = 0, t = 0;
+        const speed = 0.02;
+        function animate(){
+            const a = path[segIdx], b = path[(segIdx+1)%path.length];
+            const x = a.x + (b.x-a.x)*t;
+            const y = a.y + (b.y-a.y)*t;
+            dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+            t += speed;
+            if(t>=1){ t=0; segIdx = (segIdx+1)%path.length; }
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+
+    // ---------- differential signaling scope (bit-driven) ----------
+    (function(){
+        const canvas = document.getElementById('diffscope');
+        const ctx = canvas.getContext('2d');
+        const labelWrap = document.getElementById('bitlabels');
+        const bits = [1,0,1,1,0,0,1,0];
+        bits.forEach(b=>{
+            const span = document.createElement('span');
+            span.textContent = b;
+            span.className = b===0 ? 'dom' : 'rec';
+            labelWrap.appendChild(span);
+        });
+
+        function resize(){
+            canvas.width = canvas.clientWidth * devicePixelRatio;
+            canvas.height = canvas.clientHeight * devicePixelRatio;
+            render();
+        }
+        function render(){
+            const w = canvas.width, h = canvas.height, dpr = devicePixelRatio;
+            ctx.clearRect(0,0,w,h);
+            const segW = w/bits.length;
+            const recH = h*0.32, domH = h*0.12;
+            const recL = h*0.68, domL = h*0.88;
+
+            function trace(color, recY, domY){
+                ctx.beginPath();
+                ctx.strokeStyle = color; ctx.lineWidth = 3*dpr;
+                ctx.shadowColor = color; ctx.shadowBlur = 7*dpr;
+                bits.forEach((b,i)=>{
+                    const y = b===0 ? domY : recY;
+                    const x0 = i*segW, x1=(i+1)*segW;
+                    if(i===0) ctx.moveTo(x0,y); else ctx.lineTo(x0,y);
+                    ctx.lineTo(x1,y);
+                });
+                ctx.stroke(); ctx.shadowBlur=0;
+            }
+            trace('#4FFFB0', recH, domH);
+            trace('#FFB454', recL, domL);
+
+            // gridlines per bit
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+            bits.forEach((b,i)=>{ ctx.beginPath(); ctx.moveTo(i*segW,0); ctx.lineTo(i*segW,h); ctx.stroke(); });
+        }
+        resize();
+        window.addEventListener('resize', resize);
+    })();
+
+    // ---------- arbitration animation ----------
+    (function(){
+        const rows = document.querySelectorAll('.arb-row');
+        function buildBoxes(){
+            rows.forEach(row=>{
+                const bitsStr = row.querySelector('.arb-bits').dataset.bits;
+                const wrap = row.querySelector('.arb-bits');
+                wrap.innerHTML = '';
+                bitsStr.split('').forEach(b=>{
+                    const box = document.createElement('div');
+                    box.className='bit-box'; box.textContent=b;
+                    wrap.appendChild(box);
+                });
+            });
+        }
+        buildBoxes();
+
+        function resetRows(){
+            rows.forEach(row=>{
+                row.querySelectorAll('.bit-box').forEach(b=>{ b.classList.remove('lit','lost'); });
+                const st = row.querySelector('.arb-status');
+                st.classList.remove('show','win','lose'); st.textContent='';
+            });
+        }
+
+        let running = false;
+        function playArbitration(){
+            if(running) return;
+            running = true;
+            resetRows();
+            const data = {
+                A: '10110'.split('').map(Number),
+                B: '10011'.split('').map(Number),
+                C: '11000'.split('').map(Number)
+            };
+            const alive = {A:true,B:true,C:true};
+            let bitIdx = 0;
+            const len = 5;
+
+            function step(){
+                if(bitIdx>=len){ running=false; return; }
+                // determine wire value = min across alive nodes (0 dominates)
+                let wireVal = 1;
+                Object.keys(data).forEach(n=>{ if(alive[n] && data[n][bitIdx]===0) wireVal = 0; });
+
+                Object.keys(data).forEach(n=>{
+                    const row = document.querySelector('.arb-row[data-node="'+n+'"]');
+                    const box = row.querySelectorAll('.bit-box')[bitIdx];
+                    if(!alive[n]){ box.classList.add('lost'); return; }
+                    box.classList.add('lit');
+                    if(data[n][bitIdx] !== wireVal){
+                        alive[n]=false;
+                        // mark remaining boxes lost
+                        row.querySelectorAll('.bit-box').forEach((bb,i)=>{ if(i>bitIdx) bb.classList.add('lost'); });
+                        const st = row.querySelector('.arb-status');
+                        st.textContent = 'backs off'; st.classList.add('show','lose');
+                    }
+                });
+
+                bitIdx++;
+                if(bitIdx<len){
+                    setTimeout(step, 750);
+                } else {
+                    // declare winner
+                    Object.keys(alive).forEach(n=>{
+                        if(alive[n]){
+                            const row = document.querySelector('.arb-row[data-node="'+n+'"]');
+                            const st = row.querySelector('.arb-status');
+                            st.textContent = '★ WINS BUS'; st.classList.add('show','win');
+                        }
+                    });
+                    running=false;
+                }
+            }
+            step();
+        }
+
+        document.getElementById('arbReplay').addEventListener('click', playArbitration);
+
+        const arbIO = new IntersectionObserver((entries)=>{
+            entries.forEach(e=>{ if(e.isIntersecting){ playArbitration(); arbIO.disconnect(); } });
+        },{threshold:0.4});
+        arbIO.observe(document.getElementById('arb'));
+    })();
+
+    // ---------- error state machine auto-cycle ----------
+    (function(){
+        const nodes = document.querySelectorAll('#fsm .fsm-node');
+        let idx = 0;
+        function highlight(){
+            nodes.forEach(n=>n.classList.remove('active-state'));
+            nodes[idx].classList.add('active-state');
+            idx = (idx+1)%nodes.length;
+        }
+        let interval;
+        const fsmIO = new IntersectionObserver((entries)=>{
+            entries.forEach(e=>{
+                if(e.isIntersecting){
+                    highlight();
+                    interval = setInterval(highlight, 1800);
+                } else if(interval){ clearInterval(interval); }
+            });
+        },{threshold:0.4});
+        fsmIO.observe(document.getElementById('fsm'));
+    })();
+</script>
+</body>
+</html>
